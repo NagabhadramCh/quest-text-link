@@ -120,9 +120,11 @@
 
   async function start() {
     if (!bt) { stop('This link is not valid. Please ask for a new one on your call.'); return; }
-    if (!window.AgentSDK || !window.AgentSDK.AgentSDK) { stop('Could not load the secure session. Please continue on your call.'); return; }
+    // The embed script exposes the SDK class as window.AgentSDK (older builds: window.AgentSDK.AgentSDK).
+    var SDKClass = (window.AgentSDK && window.AgentSDK.AgentSDK) || (typeof window.AgentSDK === 'function' ? window.AgentSDK : null);
+    if (!SDKClass) { stop('Could not load the secure session. Please continue on your call.'); return; }
     try {
-      var sdk = new window.AgentSDK.AgentSDK({ endpoint: ENDPOINT, projectId: PROJECT_ID, bootstrapToken: bt });
+      var sdk = new SDKClass({ endpoint: ENDPOINT, projectId: PROJECT_ID, bootstrapToken: bt });
       await sdk.connect();
       chat = sdk.chat();
     } catch (e) {
