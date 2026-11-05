@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Type your details</title>
+<style>
+  :root {
+    --bg: #f5f7f8; --card: #ffffff; --text: #1d2327; --muted: #5b6770; --line: #d5dde2;
+    --accent: #0b6e4f; --accent-text: #ffffff; --error: #b3261e; --ok-bg: #e7f4ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111518; --card: #1a2024; --text: #e8edf0; --muted: #a3b0b8; --line: #2f383e;
+      --accent: #3fb08a; --accent-text: #08130e; --error: #f2b8b5; --ok-bg: #16302a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 460px; margin: 0 auto; padding: 24px 16px 48px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px 18px; }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 18px; }
+  label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  .hint { display: block; color: var(--muted); font-weight: 400; font-size: .9rem; }
+  input { width: 100%; font: inherit; font-size: 1.1rem; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
+  input:focus { outline: 3px solid color-mix(in srgb, var(--accent) 40%, transparent); border-color: var(--accent); }
+  button { width: 100%; margin-top: 20px; padding: 14px; font: inherit; font-size: 1.05rem; font-weight: 700; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-text); cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: progress; }
+  .err { color: var(--error); font-size: .95rem; margin-top: 8px; min-height: 1.2em; }
+  .done { background: var(--ok-bg); border-radius: 10px; padding: 16px; }
+  .foot { color: var(--muted); font-size: .85rem; margin-top: 16px; text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>Quest Diagnostics test results line</h1>
+    <p class="sub" id="lead">Checking your link…</p>
+
+    <form id="form" hidden novalidate autocomplete="off">
+      <div id="accountFields" hidden>
+        <label for="account">Quest account number
+          <span class="hint">4 to 8 digits, as on your Quest paperwork</span></label>
+        <input id="account" name="account" inputmode="numeric" pattern="[0-9 ]*" maxlength="12" autocomplete="off">
+      </div>
+      <div id="patientFields" hidden>
+        <label for="first">Patient first name</label>
+        <input id="first" name="first" maxlength="40" autocomplete="off" autocapitalize="words">
+        <label for="last">Patient last name</label>
+        <input id="last" name="last" maxlength="40" autocomplete="off" autocapitalize="words">
+        <label for="dob">Patient date of birth</label>
+        <input id="dob" name="dob" type="date" min="1900-01-01">
+      </div>
+      <div class="err" id="err" role="alert" aria-live="polite"></div>
+      <button type="submit" id="submit">Submit</button>
+    </form>
+
+    <div class="done" id="done" hidden role="status">
+      <strong>Thank you, we have it.</strong><br>
+      Go back to your call and say <strong>"done"</strong>.
+    </div>
+  </div>
+  <p class="foot">This one-time link expires 15 minutes after it was sent. Please don't share it.</p>
+</main>
+<script>
+(function () {
+  'use strict';
+  // Link store (test mock API). Swap this one address for the production store.
+  var STORE = 'https://6aca73ee3115bcc95820d8c6.mockapi.io/deliveries';
+
+  var q = new URLSearchParams(location.search);
+  var ref = (q.get('r') || '').replace(/[^0-9A-Za-z_-]/g, '').slice(0, 20);
+  var tok = (q.get('t') || '').slice(0, 40);
+  var fields = q.get('f') === 'patient' ? 'patient' : 'account';
+  // Remove the one-time values from the address bar and history.
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+
+  var $ = function (id) { return document.getElementById(id); };
+  var lead = $('lead'), form = $('form'), err = $('err'), btn = $('submit');
+
+  function stop(msg) { lead.textContent = msg; form.hidden = true; }
+
+  function load(cb) {
+    fetch(STORE + '/' + encodeURIComponent(ref), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('missing'); return r.json(); })
+      .then(cb)
+      .catch(function () { stop('This link is not valid. Please ask for a new one on your call.'); });
+  }
+
+  function active(rec) {
+    if (!rec || rec.kind !== 'text_link' || rec.token !== tok) return 'This link is not valid. Please ask for a new one on your call.';
+    if (rec.status === 'submitted' || rec.status === 'consumed') return 'This link was already used. Go back to your call and say "done".';
+    if (rec.status !== 'sent' && rec.status !== 'pending') return 'This link is no longer active. Please continue on your call.';
+    if (rec.expiresAt && Date.now() > Date.parse(rec.expiresAt)) return 'This link has expired. Please continue on your call.';
+    return '';
+  }
+
+  if (!ref || !tok) { stop('This link is not valid. Please ask for a new one on your call.'); return; }
+
+  load(function (rec) {
+    var why = active(rec);
+    if (why) { stop(why); return; }
+    fields = rec.fields === 'patient' ? 'patient' : 'account';
+    lead.textContent = fields === 'patient'
+      ? "Type the patient's name and date of birth, then tap Submit."
+      : 'Type your Quest account number, then tap Submit.';
+    $(fields === 'patient' ? 'patientFields' : 'accountFields').hidden = false;
+    $('dob').max = new Date().toISOString().slice(0, 10);
+    form.hidden = false;
+    (fields === 'patient' ? $('first') : $('account')).focus();
+  });
+
+  function values() {
+    if (fields === 'account') {
+      var d = $('account').value.replace(/[^0-9]/g, '');
+      if (d.length < 4 || d.length > 8) return { error: 'Enter the 4 to 8 digit account number.' };
+      return { v: { account: d } };
+    }
+    var clean = function (s) { return s.replace(/[^A-Za-z' .-]/g, '').replace(/\s+/g, ' ').trim(); };
+    var first = clean($('first').value), last = clean($('last').value), dob = $('dob').value;
+    if (!first || !last) return { error: "Enter the patient's first and last name." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob) || dob > new Date().toISOString().slice(0, 10) || dob < '1900-01-01') return { error: 'Enter a valid date of birth.' };
+    return { v: { first: first, last: last, dob: dob } };
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var x = values();
+    if (x.error) { err.textContent = x.error; return; }
+    err.textContent = '';
+    btn.disabled = true; btn.textContent = 'Sending…';
+    // Re-check the link right before writing, so an expired or used link is never overwritten.
+    load(function (rec) {
+      var why = active(rec);
+      if (why) { stop(why); return; }
+      fetch(STORE + '/' + encodeURIComponent(ref), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'submitted', values: JSON.stringify(x.v), submittedToken: tok, submittedAt: new Date().toISOString() })
+      })
+        .then(function (r) { if (!r.ok) throw new Error('save'); form.hidden = true; lead.hidden = true; $('done').hidden = false; })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Submit'; err.textContent = 'Something went wrong. Please try again, or say your details on the call.'; });
+    });
+  });
+})();
+</script>
+</body>
+</html>
